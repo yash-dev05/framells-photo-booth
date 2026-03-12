@@ -6,7 +6,7 @@ Framells is a simple web-based photo booth application that allows users to capt
 
 ## Live Demo
 
-https://yash-dev05.github.io/framells-photo-booth
+https://yash-dev05.github.io/framells-photo-booth/
 
 ---
 
