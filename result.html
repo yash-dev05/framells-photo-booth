@@ -1,0 +1,634 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Booth Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playpen+Sans+Deva:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+<style>
+:root {
+  --bg: #fcf7f4;
+  --panel: #fffaf8;
+  --ink: #69414c;
+  --soft: #8b6d71;
+  --accent: #e88ca2;
+  --accent-strong: #d97790;
+  --line: #f1dbe2;
+  --line-strong: #e9c7d1;
+  --btn-soft: #fff3f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 10%, #ffe8ef 0%, transparent 35%),
+    radial-gradient(circle at 85% 100%, #fbeee8 0%, transparent 35%),
+    var(--bg);
+  color: var(--ink);
+  font-family: "Playpen Sans Deva", cursive;
+  display: flex;
+  justify-content: center;
+  padding: 28px 16px;
+}
+
+.app {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 18px;
+}
+
+.panel,
+.editor-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(232, 140, 162, 0.18);
+}
+
+.panel {
+  padding: 18px;
+}
+
+.editor-wrap {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 2rem;
+  letter-spacing: 0.02em;
+  font-family: "Dancing Script", cursive;
+  color: #69414c;
+}
+
+.sub {
+  margin: 0 0 14px;
+  color: var(--soft);
+  font-size: 0.92rem;
+}
+
+.section-title {
+  margin: 14px 0 8px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--soft);
+}
+
+.templates,
+.tools {
+  display: grid;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid var(--line);
+  background: var(--btn-soft);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(232, 140, 162, 0.25);
+}
+
+button.active {
+  border-color: var(--accent);
+  background: #ffe6ee;
+}
+
+button.primary {
+  border-color: var(--accent);
+  color: #fff;
+  background: linear-gradient(135deg, #ff8ba3, #ff5d82);
+}
+
+button.primary:hover {
+  box-shadow: 0 8px 18px rgba(255, 93, 130, 0.42);
+}
+
+.status {
+  min-height: 20px;
+  margin-top: 10px;
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.canvas-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fef3f1;
+  border-radius: 12px;
+  border: 1px dashed #e8c8d2;
+  padding: 10px;
+}
+
+canvas {
+  border-radius: 10px;
+}
+
+.tip {
+  margin: 0;
+  color: var(--soft);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1>Photobooth Studio</h1>
+    <p class="sub">Drag, rotate, resize, reorder, and export your final strip.</p>
+
+    <p class="section-title">Templates</p>
+    <div class="templates" id="templateButtons">
+      <button data-template="filmStrip">Film Strip</button>
+      <button data-template="polaroid">Polaroid</button>
+      <button data-template="loveFrame">Love Frame</button>
+      <button data-template="minimal">Minimal</button>
+    </div>
+
+    <p class="section-title">Tools</p>
+    <div class="tools">
+      <button id="addTextBtn">Add Text</button>
+      <button id="bringFrontBtn">Bring Forward</button>
+      <button id="sendBackBtn">Send Backward</button>
+      <button id="downloadBtn" class="primary">Download PNG</button>
+    </div>
+
+    <div class="status" id="statusText"></div>
+  </aside>
+
+  <section class="editor-wrap">
+    <div class="canvas-area">
+      <canvas id="editor" width="640" height="920"></canvas>
+    </div>
+    <p class="tip">Tip: click an object for resize/rotate handles. Double-click text to edit.</p>
+  </section>
+</div>
+
+<script>
+const CANVAS_WIDTH = 640;
+const CANVAS_HEIGHT = 920;
+const REQUIRED_PHOTO_COUNT = 4;
+
+const canvas = new fabric.Canvas("editor", {
+  preserveObjectStacking: true,
+  selection: true,
+});
+
+const statusText = document.getElementById("statusText");
+const templateButtonsRoot = document.getElementById("templateButtons");
+const templateButtons = Array.from(templateButtonsRoot.querySelectorAll("button[data-template]"));
+
+let photoSources = [];
+
+const clampPhotos = (sources) => {
+  const safe = Array.isArray(sources) ? sources.filter((item) => typeof item === "string" && item.trim()) : [];
+  if (safe.length === 0) return [];
+  if (safe.length >= REQUIRED_PHOTO_COUNT) return safe.slice(0, REQUIRED_PHOTO_COUNT);
+
+  const padded = [...safe];
+  while (padded.length < REQUIRED_PHOTO_COUNT) {
+    padded.push(safe[padded.length % safe.length]);
+  }
+  return padded;
+};
+
+function getStoredPhotos() {
+  try {
+    const raw = localStorage.getItem("boothPhotos");
+    return clampPhotos(JSON.parse(raw || "[]"));
+  } catch (error) {
+    console.error("Failed to parse boothPhotos from localStorage", error);
+    return [];
+  }
+}
+
+function setStatus(message) {
+  statusText.textContent = message;
+}
+
+function getTimestamp() {
+  const now = new Date();
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(now);
+}
+
+function loadFabricImage(url) {
+  return new Promise((resolve, reject) => {
+    fabric.Image.fromURL(
+      url,
+      (img) => {
+        if (!img) {
+          reject(new Error("Image load returned empty object"));
+          return;
+        }
+        img.set({
+          lockUniScaling: true,
+          cornerStyle: "circle",
+          transparentCorners: false,
+          borderColor: "#e88ca2",
+          cornerColor: "#e88ca2",
+          cornerStrokeColor: "#ffffff",
+          borderScaleFactor: 2,
+          padding: 2,
+        });
+        resolve(img);
+      },
+      { crossOrigin: "anonymous" }
+    );
+  });
+}
+
+function fitImageToSlot(img, slot) {
+  const scale = Math.min(slot.width / img.width, slot.height / img.height);
+  img.scale(scale);
+
+  const scaledW = img.getScaledWidth();
+  const scaledH = img.getScaledHeight();
+
+  img.set({
+    left: slot.left + (slot.width - scaledW) / 2,
+    top: slot.top + (slot.height - scaledH) / 2,
+  });
+}
+
+function setTemplateButtonState(activeKey) {
+  templateButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.template === activeKey);
+  });
+}
+
+function addBackgroundRect(fill, options = {}) {
+  const rect = new fabric.Rect({
+    left: 0,
+    top: 0,
+    width: CANVAS_WIDTH,
+    height: CANVAS_HEIGHT,
+    fill,
+    selectable: false,
+    evented: false,
+    ...options,
+  });
+  canvas.add(rect);
+  canvas.sendToBack(rect);
+}
+
+function addDecorativeHeart(left, top, size = 44, color = "#f06595", angle = 0) {
+  const heart = new fabric.Text("❤", {
+    left,
+    top,
+    fontSize: size,
+    fill: color,
+    angle,
+    selectable: false,
+    evented: false,
+    opacity: 0.8,
+    shadow: "0 2px 8px rgba(0,0,0,0.15)",
+  });
+  canvas.add(heart);
+}
+
+async function placePhoto(photoUrl, slot, options = {}) {
+  const img = await loadFabricImage(photoUrl);
+  fitImageToSlot(img, slot);
+
+  if (options.frame) {
+    const framePadding = options.frame.padding ?? 12;
+    const frame = new fabric.Rect({
+      left: slot.left - framePadding,
+      top: slot.top - framePadding,
+      width: slot.width + framePadding * 2,
+      height: slot.height + framePadding * 2,
+      rx: options.frame.rx ?? 6,
+      ry: options.frame.ry ?? 6,
+      fill: options.frame.fill ?? "#ffffff",
+      stroke: options.frame.stroke ?? "#dedede",
+      strokeWidth: options.frame.strokeWidth ?? 1,
+      selectable: false,
+      evented: false,
+      shadow: options.frame.shadow ?? "0 6px 14px rgba(0,0,0,0.2)",
+    });
+    canvas.add(frame);
+    frame.sendToBack();
+  }
+
+  if (options.filter) {
+    img.filters = [options.filter];
+    img.applyFilters();
+  }
+
+  if (typeof options.angle === "number") {
+    img.rotate(options.angle);
+  }
+
+  img.setCoords();
+  canvas.add(img);
+  return img;
+}
+
+function addTemplateText(text, config = {}) {
+  const label = new fabric.IText(text, {
+    left: config.left ?? 40,
+    top: config.top ?? CANVAS_HEIGHT - 70,
+    fontSize: config.fontSize ?? 34,
+    fill: config.fill ?? "#69414c",
+    fontFamily: config.fontFamily ?? "Playpen Sans Deva",
+    fontStyle: config.fontStyle,
+    fontWeight: config.fontWeight ?? "600",
+    textAlign: config.textAlign ?? "left",
+    shadow: config.shadow,
+  });
+  canvas.add(label);
+  return label;
+}
+
+function clearEditor() {
+  canvas.getObjects().forEach((obj) => canvas.remove(obj));
+  canvas.backgroundColor = null;
+}
+
+async function applyFilmStripTemplate() {
+  clearEditor();
+  addBackgroundRect("#0a0a0a");
+
+  const slots = [
+    { left: 90, top: 50, width: 460, height: 180 },
+    { left: 90, top: 255, width: 460, height: 180 },
+    { left: 90, top: 460, width: 460, height: 180 },
+    { left: 90, top: 665, width: 460, height: 180 },
+  ];
+
+  for (let i = 0; i < REQUIRED_PHOTO_COUNT; i++) {
+    await placePhoto(photoSources[i], slots[i], {
+      filter: new fabric.Image.filters.Grayscale(),
+    });
+  }
+
+  const timestamp = addTemplateText(getTimestamp(), {
+    left: 112,
+    top: 875,
+    fontSize: 18,
+    fill: "#f8f8f8",
+    fontFamily: "Courier New",
+    fontWeight: "400",
+  });
+  timestamp.lockRotation = true;
+}
+
+async function applyPolaroidTemplate() {
+  clearEditor();
+  addBackgroundRect("#fdf2f0");
+
+  const slots = [
+    { left: 70, top: 80, width: 240, height: 210 },
+    { left: 315, top: 110, width: 240, height: 210 },
+    { left: 85, top: 360, width: 240, height: 210 },
+    { left: 300, top: 400, width: 240, height: 210 },
+  ];
+
+  const angles = [-8, 6, -5, 9];
+
+  for (let i = 0; i < REQUIRED_PHOTO_COUNT; i++) {
+    await placePhoto(photoSources[i], slots[i], {
+      angle: angles[i],
+      frame: {
+        padding: 16,
+        fill: "#ffffff",
+        stroke: "#dadada",
+        shadow: "0 8px 18px rgba(0,0,0,0.2)",
+      },
+      filter: new fabric.Image.filters.Sepia(),
+    });
+  }
+
+  addTemplateText("Polaroid Day", {
+    left: 210,
+    top: 760,
+    fontSize: 40,
+    fill: "#7d585c",
+    fontFamily: "Dancing Script",
+    fontStyle: "italic",
+  });
+}
+
+async function applyLoveFrameTemplate() {
+  clearEditor();
+
+  const gradient = new fabric.Gradient({
+    type: "linear",
+    gradientUnits: "pixels",
+    coords: { x1: 0, y1: 0, x2: CANVAS_WIDTH, y2: CANVAS_HEIGHT },
+    colorStops: [
+      { offset: 0, color: "#ffd4e4" },
+      { offset: 0.5, color: "#ffc2d1" },
+      { offset: 1, color: "#f7a8b8" },
+    ],
+  });
+  addBackgroundRect(gradient);
+
+  addDecorativeHeart(18, 18, 44, "#f06595", -16);
+  addDecorativeHeart(560, 30, 36, "#ff4d6d", 12);
+  addDecorativeHeart(26, 830, 38, "#e03131", 5);
+  addDecorativeHeart(570, 840, 48, "#d6336c", -10);
+
+  const slots = [
+    { left: 80, top: 95, width: 220, height: 220 },
+    { left: 340, top: 95, width: 220, height: 220 },
+    { left: 80, top: 375, width: 220, height: 220 },
+    { left: 340, top: 375, width: 220, height: 220 },
+  ];
+
+  for (let i = 0; i < REQUIRED_PHOTO_COUNT; i++) {
+    await placePhoto(photoSources[i], slots[i], {
+      frame: {
+        padding: 10,
+        fill: "rgba(255,255,255,0.84)",
+        stroke: "rgba(255,255,255,0.95)",
+        strokeWidth: 1,
+        shadow: "0 4px 10px rgba(130,35,70,0.28)",
+      },
+      filter: new fabric.Image.filters.BlendColor({
+        color: "#ff8fab",
+        mode: "tint",
+        alpha: 0.2,
+      }),
+    });
+  }
+
+  addTemplateText("Love ❤️", {
+    left: 230,
+    top: 710,
+    fontSize: 52,
+    fill: "#8a1538",
+    fontFamily: "Dancing Script",
+    fontStyle: "italic",
+    shadow: "0 3px 8px rgba(255,255,255,0.5)",
+  });
+}
+
+async function applyMinimalTemplate() {
+  clearEditor();
+  addBackgroundRect("#ffffff");
+
+  const gutter = 18;
+  const tileW = 244;
+  const tileH = 300;
+  const startX = (CANVAS_WIDTH - (tileW * 2 + gutter)) / 2;
+  const startY = 120;
+
+  const slots = [
+    { left: startX, top: startY, width: tileW, height: tileH },
+    { left: startX + tileW + gutter, top: startY, width: tileW, height: tileH },
+    { left: startX, top: startY + tileH + gutter, width: tileW, height: tileH },
+    { left: startX + tileW + gutter, top: startY + tileH + gutter, width: tileW, height: tileH },
+  ];
+
+  for (let i = 0; i < REQUIRED_PHOTO_COUNT; i++) {
+    await placePhoto(photoSources[i], slots[i]);
+  }
+
+  const title = new fabric.IText("FRAME", {
+    left: CANVAS_WIDTH / 2,
+    top: 42,
+    originX: "center",
+    fontSize: 36,
+    fill: "#69414c",
+    fontFamily: "Playpen Sans Deva",
+    fontWeight: "700",
+    selectable: true,
+  });
+  canvas.add(title);
+}
+
+const templates = {
+  filmStrip: applyFilmStripTemplate,
+  polaroid: applyPolaroidTemplate,
+  loveFrame: applyLoveFrameTemplate,
+  minimal: applyMinimalTemplate,
+};
+
+async function applyTemplate(templateKey) {
+  const run = templates[templateKey];
+  if (!run) return;
+
+  setStatus(`Applying ${templateKey} template...`);
+  setTemplateButtonState(templateKey);
+
+  try {
+    await run();
+    canvas.renderAll();
+    setStatus(`Loaded ${templateKey}. You can now drag, resize, rotate, and edit text.`);
+  } catch (error) {
+    console.error(error);
+    setStatus("Failed to apply template. Some photos may be invalid.");
+  }
+}
+
+function addUserText() {
+  const text = new fabric.IText("Edit me", {
+    left: 140,
+    top: 820,
+    fontSize: 34,
+    fill: "#69414c",
+    fontFamily: "Playpen Sans Deva",
+  });
+  canvas.add(text);
+  canvas.setActiveObject(text);
+  canvas.renderAll();
+}
+
+function downloadCanvas() {
+  const dataUrl = canvas.toDataURL({
+    format: "png",
+    multiplier: 2,
+    quality: 1,
+  });
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = "photobooth-edit.png";
+  link.click();
+}
+
+function bringForward() {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.bringForward(active);
+  canvas.renderAll();
+}
+
+function sendBackward() {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.sendBackwards(active);
+  canvas.renderAll();
+}
+
+function bindEvents() {
+  templateButtons.forEach((btn) => {
+    btn.addEventListener("click", () => applyTemplate(btn.dataset.template));
+  });
+
+  document.getElementById("addTextBtn").addEventListener("click", addUserText);
+  document.getElementById("downloadBtn").addEventListener("click", downloadCanvas);
+  document.getElementById("bringFrontBtn").addEventListener("click", bringForward);
+  document.getElementById("sendBackBtn").addEventListener("click", sendBackward);
+}
+
+async function initEditor() {
+  photoSources = getStoredPhotos();
+
+  if (photoSources.length < REQUIRED_PHOTO_COUNT) {
+    setStatus("Not enough captured photos found in localStorage key boothPhotos.");
+    addBackgroundRect("#ffffff");
+    addTemplateText("Capture photos first", {
+      left: 140,
+      top: 430,
+      fontSize: 42,
+      fill: "#c0392b",
+      fontFamily: "Arial",
+      fontWeight: "700",
+    });
+    canvas.renderAll();
+    return;
+  }
+
+  await applyTemplate("filmStrip");
+}
+
+bindEvents();
+initEditor();
+</script>
+</body>
+</html>

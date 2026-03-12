@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Booth</title>
+
+<style>
+
+/* PAGE */
+
+body{
+margin:0;
+height:100vh;
+
+display:flex;
+justify-content:center;
+align-items:center;
+
+font-family:"Playpen Sans Deva",sans-serif;
+
+/* photobooth cinematic background */
+
+background:
+radial-gradient(circle at center,#2a2a2a 0%,#141414 70%);
+
+color:white;
+}
+
+
+/* booth container */
+
+.booth{
+
+position:relative;
+
+padding:25px;
+
+border-radius:28px;
+
+/* glass booth effect */
+
+background:rgba(255,255,255,0.04);
+
+backdrop-filter:blur(12px);
+
+border:1px solid rgba(255,255,255,0.08);
+
+box-shadow:
+0 20px 80px rgba(0,0,0,0.8),
+0 0 60px rgba(232,140,162,0.15);
+
+width:90%;
+max-width:650px;
+
+}
+
+
+/* camera video */
+
+video{
+
+width:100%;
+
+border-radius:20px;
+
+/* subtle pink border glow */
+
+border:3px solid rgba(232,140,162,0.35);
+
+box-shadow:
+0 15px 40px rgba(0,0,0,0.8),
+0 0 30px rgba(232,140,162,0.2);
+
+}
+
+
+/* countdown */
+
+#countdown{
+
+position:absolute;
+
+top:50%;
+left:50%;
+
+transform:translate(-50%,-50%);
+
+font-size:95px;
+
+font-weight:bold;
+
+color:white;
+
+text-shadow:
+0 0 20px rgba(255,255,255,0.9),
+0 0 50px rgba(255,255,255,0.5);
+
+pointer-events:none;
+
+}
+
+
+/* start button */
+
+#startBtn{
+
+position:absolute;
+
+bottom:-75px;
+left:50%;
+
+transform:translateX(-50%);
+
+padding:14px 34px;
+
+font-size:18px;
+
+border-radius:40px;
+
+border:none;
+
+cursor:pointer;
+
+background:linear-gradient(135deg,#ff8ba3,#ff5d82);
+
+color:white;
+
+box-shadow:
+0 10px 35px rgba(255,100,140,0.6);
+
+transition:all 0.25s;
+
+}
+
+
+/* hover animation */
+
+#startBtn:hover{
+
+transform:translateX(-50%) scale(1.08);
+
+box-shadow:
+0 15px 45px rgba(255,100,140,0.9);
+
+}
+
+
+/* flash overlay */
+
+.flash{
+
+position:absolute;
+
+top:0;
+left:0;
+
+width:100%;
+height:100%;
+
+background:white;
+
+opacity:0;
+
+border-radius:20px;
+
+pointer-events:none;
+
+}
+
+
+/* flash animation */
+
+.flash.active{
+
+animation:flashEffect 0.35s ease;
+
+}
+
+
+/* flash keyframes */
+
+
+@keyframes flashEffect{
+0%{opacity:0;}
+40%{opacity:1;}
+100%{opacity:0;}
+}
+
+/* MOBILE ADJUST */
+
+@media(max-width:600px){
+
+#countdown{
+font-size:60px;
+}
+
+#startBtn{
+font-size:16px;
+padding:12px 24px;
+}
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="booth">
+
+<video id="camera" autoplay playsinline></video>
+
+<div id="countdown"></div>
+
+<div class="flash" id="flash"></div>
+
+<button id="startBtn">Start Booth</button>
+
+</div>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<audio id="shutter" src="shutter.mp3"></audio>
+
+<script>
+
+const video = document.getElementById("camera")
+const canvas = document.getElementById("canvas")
+const countdown = document.getElementById("countdown")
+const flash = document.getElementById("flash")
+const shutter = document.getElementById("shutter")
+
+let photos = []
+let photoCount = 0
+
+/* CAMERA ACCESS */
+
+navigator.mediaDevices.getUserMedia({
+video:{
+facingMode:"user"   // front camera on phones
+}
+})
+.then(stream=>{
+video.srcObject = stream
+})
+.catch(()=>{
+alert("Camera permission required")
+})
+
+document.getElementById("startBtn").onclick = startBooth;
+    
+function startBooth(){
+
+/* unlock audio for browsers */
+
+shutter.play().then(()=>{
+shutter.pause()
+shutter.currentTime = 0
+}).catch(()=>{})
+
+photoCount = 0
+photos = []
+
+captureSequence()
+
+}
+
+/* PHOTO SEQUENCE */
+
+function captureSequence(){
+
+if(photoCount >= 4){
+
+localStorage.setItem("boothPhotos", JSON.stringify(photos))
+
+window.location.href = "result.html"
+
+return
+}
+
+startCountdown()
+
+}
+
+/* COUNTDOWN */
+
+function startCountdown(){
+
+let count = 3
+
+countdown.innerText = count
+
+const interval = setInterval(()=>{
+
+count--
+
+countdown.innerText = count >= 0 ? count : ""
+
+if(count < 0){
+
+clearInterval(interval)
+
+takePhoto()
+
+}
+
+},1000)
+
+}
+
+/* TAKE PHOTO */
+
+function takePhoto(){
+
+/* SHUTTER SOUND */
+
+shutter.currentTime = 0
+shutter.play()
+
+/* FLASH */
+
+flash.classList.add("active")
+
+setTimeout(()=>{
+flash.classList.remove("active")
+},350)
+
+/* CAPTURE IMAGE */
+
+const ctx = canvas.getContext("2d")
+
+canvas.width = video.videoWidth
+canvas.height = video.videoHeight
+
+ctx.drawImage(video,0,0)
+
+const img = canvas.toDataURL("image/png")
+
+photos.push(img)
+
+photoCount++
+
+setTimeout(captureSequence,900)
+
+}
+
+</script>
+
+</body>
+</html>
