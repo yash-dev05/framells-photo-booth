@@ -24,6 +24,7 @@ margin:0;
 background:#fcf7f4;
 font-family:"Playpen Sans Deva", cursive;
 color:#7d585c;
+overflow-x:hidden;
 }
 
 
@@ -302,6 +303,7 @@ position:relative;
 .hero-main{
 
 width:500px;
+max-width:100%;
 
 border-radius:12px;
 
@@ -366,9 +368,11 @@ box-shadow: 0px -1px 10px rgba(255, 192, 203, 0.46);
 }
 .styles-text{
     width: 650px;
+    max-width: 100%;
 }
 .styles-photo{
     width: 80%;
+    max-width: 100%;
 }
 
 
@@ -444,6 +448,107 @@ box-shadow: 0px -1px 10px rgba(255, 192, 203, 0.46);
 @media (max-width: 768px) {
   .footer-decor {
     display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  nav {
+    padding: 0 28px;
+  }
+
+  .hero {
+    padding: 56px 36px;
+    gap: 24px;
+  }
+
+  .hero-text h1 {
+    font-size: 48px;
+  }
+
+  .hero-main {
+    width: min(460px, 100%);
+  }
+}
+
+@media (max-width: 900px) {
+  nav {
+    height: auto;
+    padding: 14px 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .logo img {
+    width: 135px;
+  }
+
+  .nav-links {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px 20px;
+  }
+
+  .hero {
+    flex-direction: column;
+    text-align: center;
+    padding: 44px 18px;
+  }
+
+  .hero-text {
+    max-width: 100%;
+  }
+
+  .hero-text h1 {
+    font-size: clamp(34px, 9vw, 50px);
+    line-height: 1.2;
+  }
+
+  .hero-text p {
+    font-size: 16px;
+  }
+
+  .features {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .styles {
+    padding-top: 24px;
+  }
+
+  .styles-text {
+    width: min(650px, 92%);
+  }
+
+  .styles-photo {
+    width: 92%;
+  }
+}
+
+@media (max-width: 560px) {
+  .start-btn,
+  .hero-btn {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .dropdown-menu {
+    left: 50%;
+    transform: translate(-50%, 8px);
+  }
+
+  .dropdown:hover .dropdown-menu {
+    transform: translate(-50%, 0);
+  }
+
+  .feature {
+    font-size: 14px;
   }
 }
 
