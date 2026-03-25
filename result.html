@@ -20,6 +20,8 @@
   --line: #f1dbe2;
   --line-strong: #e9c7d1;
   --btn-soft: #fff3f6;
+  --canvas-width: 640;
+  --canvas-height: 920;
 }
 
 * {
@@ -28,7 +30,7 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100svh;
   background:
     radial-gradient(circle at 15% 10%, #ffe8ef 0%, transparent 35%),
     radial-gradient(circle at 85% 100%, #fbeee8 0%, transparent 35%),
@@ -37,14 +39,16 @@ body {
   font-family: "Playpen Sans Deva", cursive;
   display: flex;
   justify-content: center;
-  padding: 28px 16px;
+  align-items: center;
+  padding: clamp(12px, 2.8vw, 28px);
 }
 
 .app {
-  width: min(1120px, 100%);
+  width: min(1080px, 100%);
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 18px;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  gap: clamp(12px, 2vw, 22px);
+  align-items: center;
 }
 
 .panel,
@@ -56,14 +60,15 @@ body {
 }
 
 .panel {
-  padding: 18px;
+  padding: clamp(14px, 2vw, 20px);
 }
 
 .editor-wrap {
-  padding: 16px;
+  padding: clamp(12px, 1.8vw, 18px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
 }
 
 h1 {
@@ -133,28 +138,61 @@ button.primary:hover {
 }
 
 .canvas-area {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #fef3f1;
-  border-radius: 12px;
+  max-width: 420px;
+  width: 100%;
+  aspect-ratio: 16 / 23;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg,#fff8f7,#fdf1ef);
+  border-radius: 16px;
   border: 1px dashed #e8c8d2;
   padding: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+  overflow: hidden;
 }
 
 canvas {
-  border-radius: 10px;
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(105,65,76,0.14);
 }
 
 .tip {
   margin: 0;
   color: var(--soft);
   font-size: 0.84rem;
+  text-align: center;
+  max-width: 46ch;
 }
 
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .panel {
+    order: 2;
+  }
+
+  .editor-wrap {
+    order: 1;
+  }
+
+  .canvas-area {
+    width: min(100%, 430px);
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    align-items: flex-start;
+  }
+
+  .canvas-area {
+    width: min(100%, 360px);
   }
 }
 </style>
@@ -178,6 +216,7 @@ canvas {
       <button id="addTextBtn">Add Text</button>
       <button id="bringFrontBtn">Bring Forward</button>
       <button id="sendBackBtn">Send Backward</button>
+      <button id="deleteBtn">Delete Selected</button>
       <button id="downloadBtn" class="primary">Download PNG</button>
     </div>
 
@@ -201,12 +240,46 @@ const canvas = new fabric.Canvas("editor", {
   preserveObjectStacking: true,
   selection: true,
 });
+canvas.setWidth(CANVAS_WIDTH);
+canvas.setHeight(CANVAS_HEIGHT);
 
 const statusText = document.getElementById("statusText");
 const templateButtonsRoot = document.getElementById("templateButtons");
 const templateButtons = Array.from(templateButtonsRoot.querySelectorAll("button[data-template]"));
+const canvasArea = document.querySelector(".canvas-area");
 
 let photoSources = [];
+let resizeRaf = null;
+
+function resizeCanvasToContainer() {
+  if (!canvasArea) return;
+
+  const containerWidth = canvasArea.clientWidth;
+  const containerHeight = canvasArea.clientHeight;
+  if (!containerWidth || !containerHeight) return;
+
+  const widthScale = containerWidth / CANVAS_WIDTH;
+  const heightScale = containerHeight / CANVAS_HEIGHT;
+  const scale = Math.min(widthScale, heightScale);
+
+  const displayWidth = Math.round(CANVAS_WIDTH * scale);
+  const displayHeight = Math.round(CANVAS_HEIGHT * scale);
+
+  canvas.setDimensions(
+    { width: displayWidth, height: displayHeight },
+    { cssOnly: true }
+  );
+  canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
+  canvas.requestRenderAll();
+}
+
+function queueResizeCanvas() {
+  if (resizeRaf) cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null;
+    resizeCanvasToContainer();
+  });
+}
 
 const clampPhotos = (sources) => {
   const safe = Array.isArray(sources) ? sources.filter((item) => typeof item === "string" && item.trim()) : [];
@@ -221,11 +294,27 @@ const clampPhotos = (sources) => {
 };
 
 function getStoredPhotos() {
+  const parseStored = (raw, sourceName) => {
+    try {
+      return clampPhotos(JSON.parse(raw || "[]"));
+    } catch (error) {
+      console.error(`Failed to parse boothPhotos from ${sourceName}`, error);
+      return [];
+    }
+  };
+
   try {
-    const raw = localStorage.getItem("boothPhotos");
-    return clampPhotos(JSON.parse(raw || "[]"));
+    const localPhotos = parseStored(localStorage.getItem("boothPhotos"), "localStorage");
+    if (localPhotos.length) return localPhotos;
   } catch (error) {
-    console.error("Failed to parse boothPhotos from localStorage", error);
+    console.error("Failed to read boothPhotos from localStorage", error);
+  }
+
+  try {
+    const sessionPhotos = parseStored(sessionStorage.getItem("boothPhotos"), "sessionStorage");
+    return sessionPhotos;
+  } catch (error) {
+    console.error("Failed to read boothPhotos from sessionStorage", error);
     return [];
   }
 }
@@ -272,15 +361,34 @@ function loadFabricImage(url) {
 }
 
 function fitImageToSlot(img, slot) {
-  const scale = Math.min(slot.width / img.width, slot.height / img.height);
-  img.scale(scale);
+  const sourceW = img.width;
+  const sourceH = img.height;
+  const sourceRatio = sourceW / sourceH;
+  const slotRatio = slot.width / slot.height;
 
-  const scaledW = img.getScaledWidth();
-  const scaledH = img.getScaledHeight();
+  let cropX = 0;
+  let cropY = 0;
+  let cropW = sourceW;
+  let cropH = sourceH;
+
+  // Center-crop source image to slot ratio, then scale exactly to slot size.
+  if (sourceRatio > slotRatio) {
+    cropW = sourceH * slotRatio;
+    cropX = (sourceW - cropW) / 2;
+  } else if (sourceRatio < slotRatio) {
+    cropH = sourceW / slotRatio;
+    cropY = (sourceH - cropH) / 2;
+  }
 
   img.set({
-    left: slot.left + (slot.width - scaledW) / 2,
-    top: slot.top + (slot.height - scaledH) / 2,
+    cropX,
+    cropY,
+    width: cropW,
+    height: cropH,
+    left: slot.left,
+    top: slot.top,
+    scaleX: slot.width / cropW,
+    scaleY: slot.height / cropH,
   });
 }
 
@@ -299,6 +407,7 @@ function addBackgroundRect(fill, options = {}) {
     fill,
     selectable: false,
     evented: false,
+    isTemplateBackground: true,
     ...options,
   });
   canvas.add(rect);
@@ -312,8 +421,8 @@ function addDecorativeHeart(left, top, size = 44, color = "#f06595", angle = 0) 
     fontSize: size,
     fill: color,
     angle,
-    selectable: false,
-    evented: false,
+    selectable: true,
+    evented: true,
     opacity: 0.8,
     shadow: "0 2px 8px rgba(0,0,0,0.15)",
   });
@@ -336,8 +445,8 @@ async function placePhoto(photoUrl, slot, options = {}) {
       fill: options.frame.fill ?? "#ffffff",
       stroke: options.frame.stroke ?? "#dedede",
       strokeWidth: options.frame.strokeWidth ?? 1,
-      selectable: false,
-      evented: false,
+      selectable: true,
+      evented: true,
       shadow: options.frame.shadow ?? "0 6px 14px rgba(0,0,0,0.2)",
     });
     canvas.add(frame);
@@ -549,6 +658,7 @@ async function applyTemplate(templateKey) {
   try {
     await run();
     canvas.renderAll();
+    resizeCanvasToContainer();
     setStatus(`Loaded ${templateKey}. You can now drag, resize, rotate, and edit text.`);
   } catch (error) {
     console.error(error);
@@ -572,12 +682,13 @@ function addUserText() {
 function downloadCanvas() {
   const dataUrl = canvas.toDataURL({
     format: "png",
-    multiplier: 2,
-    quality: 1,
+    multiplier: 3,
+    quality: 1
   });
+
   const link = document.createElement("a");
   link.href = dataUrl;
-  link.download = "photobooth-edit.png";
+  link.download = "photobooth-strip.png";
   link.click();
 }
 
@@ -595,6 +706,52 @@ function sendBackward() {
   canvas.renderAll();
 }
 
+function isDeletableObject(obj) {
+  return Boolean(obj) && obj.isTemplateBackground !== true;
+}
+
+function getSelectedDeletableObjects() {
+  const active = canvas.getActiveObject();
+  if (!active) return [];
+  if (active.type === "activeSelection") {
+    return active.getObjects().filter(isDeletableObject);
+  }
+  return isDeletableObject(active) ? [active] : [];
+}
+
+function deleteSelectedObjects() {
+  const objectsToDelete = getSelectedDeletableObjects();
+  if (!objectsToDelete.length) {
+    setStatus("Select an object to delete.");
+    return false;
+  }
+
+  objectsToDelete.forEach((obj) => canvas.remove(obj));
+  canvas.discardActiveObject();
+  canvas.renderAll();
+  setStatus(`Deleted ${objectsToDelete.length} object${objectsToDelete.length > 1 ? "s" : ""}.`);
+  return true;
+}
+
+function handleDeleteKeydown(event) {
+  if (event.key !== "Delete" && event.key !== "Backspace") return;
+
+  const activeElement = document.activeElement;
+  const tagName = activeElement?.tagName;
+  const inTypingField =
+    tagName === "INPUT" ||
+    tagName === "TEXTAREA" ||
+    activeElement?.isContentEditable;
+  if (inTypingField) return;
+
+  const activeObject = canvas.getActiveObject();
+  if (!activeObject) return;
+  if (activeObject.isEditing) return;
+
+  const removed = deleteSelectedObjects();
+  if (removed) event.preventDefault();
+}
+
 function bindEvents() {
   templateButtons.forEach((btn) => {
     btn.addEventListener("click", () => applyTemplate(btn.dataset.template));
@@ -604,13 +761,15 @@ function bindEvents() {
   document.getElementById("downloadBtn").addEventListener("click", downloadCanvas);
   document.getElementById("bringFrontBtn").addEventListener("click", bringForward);
   document.getElementById("sendBackBtn").addEventListener("click", sendBackward);
+  document.getElementById("deleteBtn").addEventListener("click", deleteSelectedObjects);
+  document.addEventListener("keydown", handleDeleteKeydown);
 }
 
 async function initEditor() {
   photoSources = getStoredPhotos();
 
   if (photoSources.length < REQUIRED_PHOTO_COUNT) {
-    setStatus("Not enough captured photos found in localStorage key boothPhotos.");
+    setStatus("Not enough captured photos found. Please capture again from camera page.");
     addBackgroundRect("#ffffff");
     addTemplateText("Capture photos first", {
       left: 140,
@@ -621,6 +780,7 @@ async function initEditor() {
       fontWeight: "700",
     });
     canvas.renderAll();
+    resizeCanvasToContainer();
     return;
   }
 
@@ -628,6 +788,8 @@ async function initEditor() {
 }
 
 bindEvents();
+resizeCanvasToContainer();
+window.addEventListener("resize", queueResizeCanvas);
 initEditor();
 </script>
 </body>
