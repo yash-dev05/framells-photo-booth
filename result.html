@@ -680,11 +680,19 @@ function addUserText() {
 }
 
 function downloadCanvas() {
+  const originalTransform = canvas.viewportTransform;
+
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  canvas.renderAll();
+
   const dataUrl = canvas.toDataURL({
     format: "png",
     multiplier: 3,
     quality: 1
   });
+
+  canvas.setViewportTransform(originalTransform);
+  canvas.renderAll();
 
   const link = document.createElement("a");
   link.href = dataUrl;
